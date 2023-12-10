@@ -1,8 +1,6 @@
 from PIL import Image
 
-def remove_white_background(image_path):
-    img = Image.open(image_path)
-
+def remove_white_background(img):
     # Пример: изменение цвета фона на прозрачный (для PNG изображений)
     img = img.convert("RGBA")
     data = img.getdata()

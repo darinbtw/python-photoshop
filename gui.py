@@ -108,6 +108,7 @@ class GUI:
             self.draw.line([self.last_x, self.last_y, x, y], fill=self.draw_color, width=self.line_width)
             self.last_x, self.last_y = x, y
         self.action_stack.append(self.user_drawing.copy())
+        self.current_drawing = self.user_drawing.copy()  # Сохраняем текущий рисунок
 
     def reset(self, event):
         if self.original_image and self.user_drawing:
@@ -124,13 +125,13 @@ class GUI:
                         return
                 self.display_image()
             else:
-                # Если нет действий в стеке, отображаем оригинальное изображение
-                if self.original_image is not None:
+                # Если нет действий в стеке, отображаем текущий рисунок
+                if self.current_drawing is not None:
+                    self.user_drawing = self.current_drawing.copy()
+                    self.display_image()
+                elif self.original_image is not None:
                     self.user_drawing = self.original_image.copy()
                     self.display_image()
-                else:
-                    # Если оригинальное изображение отсутствует, можете предпринять другие действия
-                    return
 
     def zoom_with_wheel(self, event):
         if event.delta > 0:
@@ -144,21 +145,31 @@ class GUI:
             if self.action_stack:
                 self.user_drawing = self.action_stack[-1].copy()  # Восстанавливаем предыдущее состояние
                 self.display_image()  # Обновление отображения
-
-    def undo(self, event):
-        pass
-
+            else:
+                # Если стек действий пуст, отобразите оригинальное изображение
+                self.user_drawing = self.original_image.copy()
+                self.display_image()
+                
     def display_image(self):
         self.canvas.delete("all")  # Удаление всех элементов на холсте
         scale_factor = self.scale_factor.get()
-    
+
         # Замените Image.ANTIALIAS на "antialias"
-        resized_image = self.user_drawing.resize((int(self.user_drawing.width * scale_factor), int(self.user_drawing.height * scale_factor)), method="antialias")
+        resized_image = self.user_drawing.resize(
+        (   int(self.user_drawing.width * scale_factor), int(self.user_drawing.height * scale_factor))
+        )
+
+        # Создайте белый фон
+        white_background = Image.new("RGB", resized_image.size, "white")
     
-        display_image = ImageTk.PhotoImage(resized_image)
+        # Наложите изображение на белый фон
+        final_image = Image.alpha_composite(white_background.convert("RGBA"), resized_image.convert("RGBA"))
+
+        display_image = ImageTk.PhotoImage(final_image)
         self.canvas.config(width=resized_image.width, height=resized_image.height)
         self.canvas.create_image(0, 0, anchor=tk.NW, image=display_image, tags="img")
         self.canvas.img = display_image  # Сохранение ссылки на изображение, чтобы избежать сборки мусора
+
 
     def open_image(self):
         file_path = filedialog.askopenfilename(filetypes=[("Изображения", "*.png;*.jpg;*.jpeg;*.gif")])
@@ -172,15 +183,18 @@ class GUI:
         if self.original_image:
             file_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG файлы", "*.png")])
             if file_path:
-                self.user_drawing.save(file_path)
+                # Преобразование изображения перед сохранением
+                image_to_save = self.user_drawing.convert("RGB")
+                image_to_save.save(file_path)
                 self.status_label.config(text=f"Изображение сохранено как: {file_path}")
 
-    def resize_image(self):
-        if self.original_image:
-            width, height = self.master.winfo_width(), self.master.winfo_height()
-            resized_image = self.user_drawing.resize((width, height), Image.ANTIALIAS)
-            self.user_drawing = resized_image.copy()
-            self.display_image()
+    def resize_image(self, event=None):
+        width = self.master.winfo_width()
+        height = self.master.winfo_height()
+
+        if self.user_drawing is not None:
+            resized_image = self.user_drawing.resize((width, height))
+            self.display_image(resized_image)
 
     def rotate_image(self):
         if self.original_image:
